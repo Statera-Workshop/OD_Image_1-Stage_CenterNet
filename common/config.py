@@ -71,6 +71,26 @@ if IMAGE_DATASET == "fl36":
 elif IMAGE_DATASET != "voc2007":
     raise ValueError(f"UNIFIED_IMAGE_DATASET must be voc2007 or fl36, not {IMAGE_DATASET!r}")
 
+KITTI_CLASSES = ("Car", "Pedestrian", "Cyclist")
+
+# [Unified] Segmentation stage (2026-10-11). Instance segmentation data in VOC layout:
+#   JPEGImages/, Annotations/ (boxes, unchanged), SegmentationObject/ (instance id PNG: k = k-th XML object,
+#   0 = background, 255 = void), SegmentationClass/ (class id + 1 PNG), ImageSets/Segmentation/<split>.txt.
+# FL36-Seg (default) is FashionLetters36 regenerated with the same seed plus masks; VOC2007 is the check set
+# (422 trainval / 210 test images with masks). Select with UNIFIED_SEG_DATASET=fl36seg | voc2007.
+SEG_DATASET = os.environ.get("UNIFIED_SEG_DATASET", "fl36seg")
+FL36SEG_ROOT = DATASETS_ROOT / "FashionLetters36_Seg"
+if SEG_DATASET == "fl36seg":
+    SEG_ROOT, SEG_CLASSES = FL36SEG_ROOT, FL36_CLASSES
+elif SEG_DATASET == "voc2007":
+    SEG_ROOT = DATASETS_ROOT / "VOC" / "VOCdevkit" / "VOC2007"
+    SEG_CLASSES = ("aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow",
+                   "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train",
+                   "tvmonitor")
+elif SEG_DATASET == "toy":                        # tools/make_toy_seg.py (pipeline smoke test only)
+    SEG_ROOT, SEG_CLASSES = DATASETS_ROOT / "ToySeg", ("square", "disc", "triangle")
+else:
+    raise ValueError(f"UNIFIED_SEG_DATASET must be fl36seg, voc2007 or toy, not {SEG_DATASET!r}")
 
 TASKS = {
     "image": {
@@ -80,6 +100,39 @@ TASKS = {
         "micro_batch": 2,            # x accum 4 = effective 8 (fits 8 GB)
         "train_split": "trainval",   # 5,011 images
         "test_split": "test",        # 4,952 images
+    },
+    "complex": {
+        "dataset": "kitti5k",
+        "classes": KITTI_CLASSES,
+        "img_size": 608,             # BEV map size (fixed by the BEV grid)
+        "micro_batch": 2,
+        "train_split": "trainval",   # 5,011 frames
+        "test_split": "test",        # 2,470 frames
+    },
+    "seg": {
+        "dataset": SEG_DATASET,
+        "classes": SEG_CLASSES,
+        "img_size": 608,
+        "micro_batch": 2,
+        "train_split": "trainval",
+        "test_split": "test",
+        "mask_threshold": 0.5,       # mask probability -> binary
+    },
+    "semseg": {                      # [Unified] 2026-10-11 semantic segmentation on the same SEG dataset
+        "dataset": SEG_DATASET,
+        "classes": SEG_CLASSES,      # + background (index 0) inside the models: K = C + 1
+        "img_size": 608,
+        "micro_batch": 2,
+        "train_split": "trainval",
+        "test_split": "test",
+    },
+    "yolo3d": {
+        "dataset": "kitti5k",
+        "classes": KITTI_CLASSES,
+        "img_size": 608,
+        "micro_batch": 2,
+        "train_split": "trainval",
+        "test_split": "test",
     },
 }
 

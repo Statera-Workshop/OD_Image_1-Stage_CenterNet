@@ -89,7 +89,9 @@ class VOCDetection(Dataset):
         self.img_size = int(img_size)
         self.aug = aug if train else None     # [Unified] training augmentation (see module docstring)
         self.class_names = list(class_names)
-        self.cls_to_id = {n: i for i, n in enumerate(self.class_names)}
+        # [Unified] 2026-10-16 patch 15: keys lower-cased like the XML names below (FL36 letters "A"-"Z" were dropped)
+        self.cls_to_id = {n.lower(): i for i, n in enumerate(self.class_names)}
+        assert len(self.cls_to_id) == len(self.class_names), "class names must be unique ignoring case"
         self.train = train
         self.hflip_prob = hflip_prob if train else 0.0
         split_file = self.root / "ImageSets" / "Main" / f"{split}.txt"

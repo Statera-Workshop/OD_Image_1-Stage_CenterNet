@@ -60,6 +60,15 @@ def _grads_finite(model):
     return True
 
 
+def _targets_to(targets, device):
+    """[Unified] 2026-10-11: detection targets are one float tensor [N, 6]; segmentation targets are a dict
+    {"boxes": [N, 6] float, "masks": [N, S, S] uint8} (common/datasets/voc_seg.py). Masks stay uint8."""
+    if isinstance(targets, dict):
+        return {k: v.to(device, dtype=torch.float32 if k == "boxes" else v.dtype, non_blocking=True)
+                for k, v in targets.items()}
+    return targets.to(device, dtype=torch.float32, non_blocking=True)
+
+
 def train(model, dataset, recipe, args, device, on_epoch_end=None):
     loader = make_loader(dataset, args.batch_size, args.workers, True, args.seed)
     optimizer = build_optimizer(model, recipe)
@@ -93,7 +102,7 @@ def train(model, dataset, recipe, args, device, on_epoch_end=None):
                        log_every=args.log_interval, extra_total=(args.epochs - epoch) * n_batches)
         for bi, (_, images, targets) in enumerate(loader, 1):
             images = images.to(device, dtype=torch.float32, non_blocking=True)
-            targets = targets.to(device, dtype=torch.float32, non_blocking=True)
+            targets = _targets_to(targets, device)
             loss, _ = model(images, targets)
             if not torch.isfinite(loss):
                 skipped += 1
@@ -103,6 +112,8 @@ def train(model, dataset, recipe, args, device, on_epoch_end=None):
             pending += 1
             if pending == accum or bi == n_batches:
                 if _grads_finite(model):
+                    if getattr(model, "clip_max_norm", 0):   # [Unified] 2026-10-08: optional, declared by the model
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), model.clip_max_norm)   # (DETR recipe)
                     optimizer.step()
                 else:
                     skipped += 1
